@@ -1,0 +1,5 @@
+@openzeppelin/contracts/=src/openzeppelin/contracts/
+@uni-v3-core/contracts/=src/uni-v3-core/contracts/
+@uni-v3-periphery/contracts/=src/uni-v3-periphery/contracts/
+@uniswap/v3-core/=src/uni-v3-core/contracts/
+@uniswap/v3-core/contracts/=src/uni-v3-core/contracts/

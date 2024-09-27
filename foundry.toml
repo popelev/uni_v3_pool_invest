@@ -1,4 +1,9 @@
 [profile.default]
+ solc_version = '0.8.20'
+# auto_detect_solc = true
+# evm_version = 'cancun'
+optimizer = true
+optimizer-runs = 200
 src = "src"
 out = "out"
 libs = ["lib"]
