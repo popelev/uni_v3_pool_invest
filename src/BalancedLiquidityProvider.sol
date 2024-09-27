@@ -10,14 +10,23 @@ import "@uni-v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
 import "@uni-v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+// PLEASE CHECK README FILE FOR BUILD PROJECT
+
+//TODO: Delete "console.log" after debug
+//TODO: Delete dead code if normalize token amounts to a common base not needed
+//TODO: Improve logic of swap. Add predicting on change price and swap fee for right calculation of required tokens
+//TODO: Improve logic of contract. Some tokens not imlement IERC20
+//TODO: Improve logic of contract. Work with native ETH pool
+
 contract BalancedLiquidityProvider {
     ISwapRouter public swapRouter;
     INonfungiblePositionManager public positionManager;
-    IUniswapV3Pool public pool;
 
     address public token0;
     address public token1;
     uint24 public poolFee;
+
+    event LiquidityProvided();
 
     constructor(address _swapRouter, address _positionManager) {
         swapRouter = ISwapRouter(_swapRouter);
@@ -31,7 +40,7 @@ contract BalancedLiquidityProvider {
         int24 tickLower,
         int24 tickUpper
     ) external {
-        pool = IUniswapV3Pool(_pool);
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         token0 = pool.token0();
         token1 = pool.token1();
@@ -47,40 +56,24 @@ contract BalancedLiquidityProvider {
         // Get the current price from the pool
         (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
 
-        // Estimate virtual reserves
-        uint128 poolLiquidity = pool.liquidity();
-
         // Convert tickLower into sqrtPrice in Q96 format
         uint160 sqrtPriceLowerX96 = TickMath.getSqrtRatioAtTick(tickLower); // PB = sqrt(PA)
         uint160 sqrtPriceUpperX96 = TickMath.getSqrtRatioAtTick(tickUpper); // PB = sqrt(PB)
 
-        // Normalize amounts to a common base
+        //
         uint8 decimalsToken0 = IERC20(token0).decimals();
         uint8 decimalsToken1 = IERC20(token1).decimals();
 
-        uint256 normalizedAmountToken0;
-        uint256 normalizedAmountToken1;
-
-        // // Normalize the token amounts to the same base by comparing the decimals
-        // if (decimalsToken0 > decimalsToken1) {
-        //     // Token0 has more decimals than Token1
-        //     // Scale Token1 up to match Token0's decimals
-        //     normalizedAmountToken0 = X; // No change to Token0 amount
-        //     normalizedAmountToken1 =
-        //         Y *
-        //         (10 ** (decimalsToken0 - decimalsToken1)); // Scale Token1 up
-        // } else if (decimalsToken0 < decimalsToken1) {
-        //     // Token1 has more decimals than Token0
-        //     // Scale Token0 up to match Token1's decimals
-        //     normalizedAmountToken0 =
-        //         X *
-        //         (10 ** (decimalsToken1 - decimalsToken0)); // Scale Token0 up
-        //     normalizedAmountToken1 = Y; // No change to Token1 amount
-        // } else {
-        //     // Both tokens have the same decimals
-        normalizedAmountToken0 = X; // No change
-        normalizedAmountToken1 = Y; // No change
-        // }
+        //TODO: Delete if not need, but check firstly
+        // Normalize amounts to a common base
+        // (
+        //     uint256 normalizedAmountToken0,
+        //     uint256 normalizedAmountToken1
+        // ) = normalizeAmounts(token0, token1, X, Y);
+        (uint256 normalizedAmountToken0, uint256 normalizedAmountToken1) = (
+            X,
+            Y
+        );
 
         uint8 swapDirection = decideSwap(
             normalizedAmountToken0,
@@ -191,6 +184,44 @@ contract BalancedLiquidityProvider {
             IERC20(token1).balanceOf(address(this)) /
                 10 ** uint256(decimalsToken1)
         );
+
+        emit LiquidityProvided();
+    }
+
+    // Function to normalize token amounts to a common base
+    function normalizeAmounts(
+        address token0addess, // Address of token0 (e.g., DAI)
+        address token1addess, // Address of token1 (e.g., USDC)
+        uint256 amountToken0, // Amount of token0 to be normalized
+        uint256 amountToken1 // Amount of token1 to be normalized
+    )
+        public
+        returns (uint256 normalizedAmountToken0, uint256 normalizedAmountToken1)
+    {
+        // Retrieve decimals for both tokens
+        uint8 decimalsToken0 = IERC20(token0addess).decimals();
+        uint8 decimalsToken1 = IERC20(token1addess).decimals();
+
+        // Normalize the token amounts to the same base by comparing the decimals
+        if (decimalsToken0 > decimalsToken1) {
+            // Token0 has more decimals than Token1
+            // Scale Token1 up to match Token0's decimals
+            normalizedAmountToken0 = amountToken0; // No change to Token0 amount
+            normalizedAmountToken1 =
+                amountToken1 *
+                (10 ** (decimalsToken0 - decimalsToken1)); // Scale Token1 up
+        } else if (decimalsToken0 < decimalsToken1) {
+            // Token1 has more decimals than Token0
+            // Scale Token0 up to match Token1's decimals
+            normalizedAmountToken0 =
+                amountToken0 *
+                (10 ** (decimalsToken1 - decimalsToken0)); // Scale Token0 up
+            normalizedAmountToken1 = amountToken1; // No change to Token1 amount
+        } else {
+            // Both tokens have the same decimals
+            normalizedAmountToken0 = amountToken0; // No change
+            normalizedAmountToken1 = amountToken1; // No change
+        }
     }
 
     function calculateAmountToSwap(
@@ -284,6 +315,36 @@ contract BalancedLiquidityProvider {
         amountReceived = swapRouter.exactInputSingle(params);
     }
 
+    // This is the function that uses getRequiredTokenRatio to decide which token to swap
+    function decideSwap(
+        uint256 amountToken0,
+        uint256 amountToken1,
+        uint160 sqrtPriceX96,
+        uint160 sqrtPriceLowerX96,
+        uint160 sqrtPriceUpperX96
+    ) public pure returns (uint8) {
+        // Get the required token amounts for balanced liquidity
+        (
+            uint256 requiredToken0,
+            uint256 requiredToken1
+        ) = getRequiredTokenRatio(
+                amountToken0,
+                amountToken1,
+                sqrtPriceX96,
+                sqrtPriceLowerX96,
+                sqrtPriceUpperX96
+            );
+
+        // Determine which token needs to be swapped
+        if (amountToken0 > requiredToken0) {
+            return 1; //"Swap Token0 for Token1";
+        } else if (amountToken1 > requiredToken1) {
+            return 2; //"Swap Token1 for Token2";
+        } else {
+            return 0; //"Swap not need";
+        }
+    }
+
     function getRequiredTokenRatio(
         uint256 amountToken0,
         uint256 amountToken1,
@@ -336,35 +397,5 @@ contract BalancedLiquidityProvider {
             );
         }
         return (requiredToken0, requiredToken1);
-    }
-
-    // This is the function that uses getRequiredTokenRatio to decide which token to swap
-    function decideSwap(
-        uint256 amountToken0,
-        uint256 amountToken1,
-        uint160 sqrtPriceX96,
-        uint160 sqrtPriceLowerX96,
-        uint160 sqrtPriceUpperX96
-    ) public pure returns (uint8) {
-        // Get the required token amounts for balanced liquidity
-        (
-            uint256 requiredToken0,
-            uint256 requiredToken1
-        ) = getRequiredTokenRatio(
-                amountToken0,
-                amountToken1,
-                sqrtPriceX96,
-                sqrtPriceLowerX96,
-                sqrtPriceUpperX96
-            );
-
-        // Determine which token needs to be swapped
-        if (amountToken0 > requiredToken0) {
-            return 1; //"Swap Token0 for Token1";
-        } else if (amountToken1 > requiredToken1) {
-            return 2; //"Swap Token1 for Token2";
-        } else {
-            return 0; //"Swap not need";
-        }
     }
 }

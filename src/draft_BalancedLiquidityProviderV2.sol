@@ -19,7 +19,6 @@ contract BalancedLiquidityProvider {
     ISwapRouter public swapRouter;
     INonfungiblePositionManager public positionManager;
     IUniswapV3Factory public factory;
-    IUniswapV3Pool public pool;
 
     address public token0;
     address public token1;
@@ -37,7 +36,7 @@ contract BalancedLiquidityProvider {
         int24 tickLower,
         int24 tickUpper
     ) external {
-        pool = IUniswapV3Pool(_pool);
+        IUniswapV3Pool pool = IUniswapV3Pool(_pool);
 
         factory = IUniswapV3Factory(pool.factory());
         token0 = pool.token0();
@@ -47,7 +46,7 @@ contract BalancedLiquidityProvider {
         uint256 balanceBefore0 = IERC20(token0).balanceOf(address(this));
         uint256 balanceBefore1 = IERC20(token1).balanceOf(address(this));
 
-        // Transfer token0 and token1 to the contract
+        // Transfer token0 and token1 to this contract
         IERC20(token0).transferFrom(msg.sender, address(this), X);
         IERC20(token1).transferFrom(msg.sender, address(this), Y);
 

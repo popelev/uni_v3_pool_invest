@@ -7,9 +7,10 @@ import "../src/BalancedLiquidityProvider.sol";
 import "@uni-v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "./mocks/MockPositionManager.sol";
 
-contract LiquidityProviderTest is Test {
-    // PLEASE CHECK README FILE FOR START TESTS
+// PLEASE CHECK README FILE FOR START TESTS
+//TODO: Improve logic of tests. Add slippedge for provided tokens
 
+contract LiquidityProviderTest is Test {
     // POOL         |   ADDRESS                                     | RESULT|   COMMENT
     //--------------+-----------------------------------------------+-------+----------------------------
     // DAI/USDC     |   0x97e7d56A0408570bA1a7852De36350f7713906ec  | PASS  |
@@ -18,8 +19,8 @@ contract LiquidityProviderTest is Test {
     // WBTC/cbBTC   |   0x0da6253560822973185297d5f32fF8fA38243Afe  | PASS  |
     // WBTC/WETH    |   0xCBCdF9626bC03E24f779434178A73a0B4bad62eD  | FAIL  |   FAIL REASON: ???
     // USDC/USDT    |   0x3416cF6C708Da44DB2624D63ea0AAef7113527C6  | FAIL  |   FAIL REASON: USDT not complite ERC20 ?
-    // WETH/ USDC   |   0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640  | PASS  |
-    // LINK/WET     |   0xa6Cc3C2531FdaA6Ae1A3CA84c2855806728693e8  | FAIL  |   FAIL REASON: ???
+    // WETH/USDC    |   0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640  | PASS  |
+    // LINK/WETH    |   0xa6Cc3C2531FdaA6Ae1A3CA84c2855806728693e8  | FAIL  |   FAIL REASON: ???
     //amphrLRT/wstETH|  0xBC048791147D8f89EF87F95b330b494cE3faFaD6  | FAIL  |   FAIL REASON: ???
 
     address pool = 0x97e7d56A0408570bA1a7852De36350f7713906ec;
@@ -36,6 +37,8 @@ contract LiquidityProviderTest is Test {
     address public owner = address(this);
     address public user = address(0x123);
     uint256 mainnetFork;
+
+    event LiquidityProvided();
 
     function setUp() public {
         mainnetFork = vm.createFork(MAINNET_RPC_URL);
@@ -66,6 +69,9 @@ contract LiquidityProviderTest is Test {
         uint8 decimals1 = token1.decimals();
 
         (, int24 currentTick, , , , , ) = IUniswapV3Pool(pool).slot0();
+
+        vm.expectEmit(false, false, false, false);
+        emit LiquidityProvided();
 
         // Provide liquidity with balanced token amounts
         liquidityProvider.provideBalancedLiquidity(
